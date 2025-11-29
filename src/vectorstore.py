@@ -1,52 +1,45 @@
-# src/vectorstore.py
+import numpy as np
+from sklearn.neighbors import NearestNeighbors
 
-import chromadb
+class VectorStore:
+    def __init__(self, dim=768):
+        self.dim = dim
+        self.embeddings = []
+        self.texts = []
+        self.ids = []
+        self.nn = None
 
-class SimpleChromaStore:
-    def __init__(self, path="/tmp/chroma_db"):
-        self.client = chromadb.PersistentClient(path=path)
-        try:
-            self.collection = self.client.get_collection("resumes")
-        except:
-            self.collection = self.client.create_collection(
-                name="resumes",
-                metadata={"hnsw:space": "cosine"}
-            )
+    def add(self, resume_id, text, embedding):
+        embedding = np.array(embedding, dtype=np.float32)
+        self.embeddings.append(embedding)
+        self.texts.append(text)
+        self.ids.append(resume_id)
 
-    def reset(self):
-        try:
-            self.client.delete_collection("resumes")
-        except:
-            pass
+    def build(self):
+        if len(self.embeddings) == 0:
+            return
+        X = np.stack(self.embeddings)
+        k = min(5, len(X))
+        self.nn = NearestNeighbors(n_neighbors=k, metric="cosine")
+        self.nn.fit(X)
 
-        self.collection = self.client.create_collection(
-            name="resumes",
-            metadata={"hnsw:space": "cosine"}
-        )
+    def search(self, query_emb, top_k=5):
+        if self.nn is None:
+            raise ValueError("Index not built. Call build() after adding resumes.")
 
-    def add_resume(self, rid, text, emb):
-        self.collection.add(
-            ids=[rid],
-            documents=[text],
-            embeddings=[emb]
-        )
+        total = len(self.embeddings)
+        k = min(top_k, total)
 
-    def search(self, emb, top_k):
-        res = self.collection.query(
-            query_embeddings=[emb],
-            n_results=top_k
-        )
+        query_emb = np.array(query_emb).reshape(1, -1)
+        distances, indices = self.nn.kneighbors(query_emb, n_neighbors=k)
 
-        out = []
-        for i in range(len(res["ids"][0])):
-            out.append({
-                "resume_id": res["ids"][0][i],
-                "text": res["documents"][0][i],
-                "distance": float(res["distances"][0][i])
+        results = []
+        for dist, idx in zip(distances[0], indices[0]):
+            similarity = float(1 - dist)
+            results.append({
+                "resume_id": self.ids[idx],
+                "text": self.texts[idx],
+                "similarity": similarity
             })
 
-        return out
-
-
-def create_chroma_store(path="/tmp/chroma_db"):
-    return SimpleChromaStore(path)
+        return results
