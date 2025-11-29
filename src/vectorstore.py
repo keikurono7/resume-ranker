@@ -1,5 +1,4 @@
 import numpy as np
-from sklearn.neighbors import NearestNeighbors
 
 class VectorStore:
     def __init__(self, dim=768):
@@ -7,7 +6,6 @@ class VectorStore:
         self.embeddings = []
         self.texts = []
         self.ids = []
-        self.nn = None
 
     def add(self, resume_id, text, embedding):
         embedding = np.array(embedding, dtype=np.float32)
@@ -15,31 +13,28 @@ class VectorStore:
         self.texts.append(text)
         self.ids.append(resume_id)
 
-    def build(self):
-        if len(self.embeddings) == 0:
-            return
-        X = np.stack(self.embeddings)
-        k = min(5, len(X))
-        self.nn = NearestNeighbors(n_neighbors=k, metric="cosine")
-        self.nn.fit(X)
-
     def search(self, query_emb, top_k=5):
-        if self.nn is None:
-            raise ValueError("Index not built. Call build() after adding resumes.")
+        if len(self.embeddings) == 0:
+            return []
 
-        total = len(self.embeddings)
-        k = min(top_k, total)
+        query_emb = np.array(query_emb, dtype=np.float32)
+        X = np.stack(self.embeddings)
 
-        query_emb = np.array(query_emb).reshape(1, -1)
-        distances, indices = self.nn.kneighbors(query_emb, n_neighbors=k)
+        # Compute cosine similarity manually
+        dot = np.dot(X, query_emb)
+        X_norm = np.linalg.norm(X, axis=1)
+        q_norm = np.linalg.norm(query_emb) + 1e-9
+        sims = dot / (X_norm * q_norm)
+
+        # Sort and pick top-k
+        idxs = np.argsort(sims)[::-1][:top_k]
 
         results = []
-        for dist, idx in zip(distances[0], indices[0]):
-            similarity = float(1 - dist)
+        for idx in idxs:
             results.append({
                 "resume_id": self.ids[idx],
                 "text": self.texts[idx],
-                "similarity": similarity
+                "similarity": float(sims[idx])
             })
 
         return results

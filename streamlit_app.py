@@ -36,8 +36,6 @@ if st.button("Ingest Resumes"):
         emb = embedder.embed_text(text)
 
         st.session_state.store.add(file.name, text, emb)
-
-    st.session_state.store.build()
     print("NEIGHBORS SET TO:", st.session_state.store.nn.n_neighbors)
 
     st.success("Resumes ingested successfully!")
