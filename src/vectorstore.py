@@ -20,13 +20,11 @@ class VectorStore:
         query_emb = np.array(query_emb, dtype=np.float32)
         X = np.stack(self.embeddings)
 
-        # Compute cosine similarity manually
         dot = np.dot(X, query_emb)
         X_norm = np.linalg.norm(X, axis=1)
         q_norm = np.linalg.norm(query_emb) + 1e-9
         sims = dot / (X_norm * q_norm)
 
-        # Sort and pick top-k
         idxs = np.argsort(sims)[::-1][:top_k]
 
         results = []
